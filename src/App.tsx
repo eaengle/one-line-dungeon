@@ -9,7 +9,7 @@ import { generateLevel } from './game/levelGenerator';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 export function App() {
-  const { state, moveLeft, moveRight, fight, buyItem, usePotion, openChest, retry, nextLevel, loadLevel } = useGameState();
+  const { state, moveLeft, moveRight, fight, attemptAction, buyItem, usePotion, openChest, retry, nextLevel, loadLevel } = useGameState();
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -152,6 +152,7 @@ export function App() {
         <RoomPanel
           state={state}
           onFight={fight}
+          onAttemptAction={attemptAction}
           onBuyItem={buyItem}
           onOpenChest={openChest}
           onMoveLeft={moveLeft}

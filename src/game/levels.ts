@@ -19,7 +19,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Rat Hole',
         content: {
           type: 'enemy',
-          enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2 },
+          enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
+            attrs: { sneakThreshold: 6, intimidateThreshold: 0 } },
         },
       },
       {
@@ -44,7 +45,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Guard Post',
         content: {
           type: 'enemy',
-          enemy: { id: 'goblin', name: 'Goblin Guard', hp: 14, attack: 6, defense: 1, goldReward: 4 },
+          enemy: { id: 'goblin', name: 'Goblin Guard', hp: 14, attack: 6, defense: 1, goldReward: 4,
+            attrs: { sneakThreshold: 4, intimidateThreshold: 3 } },
         },
       },
       {
@@ -83,7 +85,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Crypt',
         content: {
           type: 'enemy',
-          enemy: { id: 'skeleton', name: 'Skeleton', hp: 18, attack: 8, defense: 2, goldReward: 6 },
+          enemy: { id: 'skeleton', name: 'Skeleton', hp: 18, attack: 8, defense: 2, goldReward: 6,
+            attrs: { sneakThreshold: 0, intimidateThreshold: 8 } },
         },
       },
       {
@@ -96,7 +99,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Guard Room',
         content: {
           type: 'enemy',
-          enemy: { id: 'goblin', name: 'Goblin Brute', hp: 14, attack: 6, defense: 1, goldReward: 4 },
+          enemy: { id: 'goblin', name: 'Goblin Brute', hp: 14, attack: 6, defense: 1, goldReward: 4,
+            attrs: { sneakThreshold: 4, intimidateThreshold: 3 } },
         },
       },
       {
@@ -123,7 +127,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Dark Tunnel',
         content: {
           type: 'enemy',
-          enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2 },
+          enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
+            attrs: { sneakThreshold: 6, intimidateThreshold: 0 } },
         },
       },
       {
@@ -151,6 +156,7 @@ export const LEVELS: LevelDefinition[] = [
             defense: 1,
             goldReward: 4,
             loot: ITEMS.key,
+            attrs: { sneakThreshold: 4, intimidateThreshold: 3 },
           },
         },
       },
@@ -164,7 +170,8 @@ export const LEVELS: LevelDefinition[] = [
         name: 'Skeleton Guard',
         content: {
           type: 'enemy',
-          enemy: { id: 'skeleton', name: 'Skeleton Warrior', hp: 18, attack: 8, defense: 2, goldReward: 6 },
+          enemy: { id: 'skeleton', name: 'Skeleton Warrior', hp: 18, attack: 8, defense: 2, goldReward: 6,
+            attrs: { sneakThreshold: 0, intimidateThreshold: 8 } },
         },
       },
       {
@@ -172,7 +179,8 @@ export const LEVELS: LevelDefinition[] = [
         name: "Troll's Lair",
         content: {
           type: 'enemy',
-          enemy: { id: 'troll', name: 'Cave Troll', hp: 26, attack: 10, defense: 3, goldReward: 15 },
+          enemy: { id: 'troll', name: 'Cave Troll', hp: 26, attack: 10, defense: 3, goldReward: 15,
+            attrs: { sneakThreshold: 0, intimidateThreshold: 15 } },
         },
       },
       {

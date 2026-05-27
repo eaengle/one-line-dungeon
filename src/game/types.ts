@@ -18,6 +18,8 @@ export interface EnemyDefinition {
   defense: number;
   goldReward: number;
   loot?: Item;
+  // Extensible attributes for action success checks (sneakThreshold, intimidateThreshold, etc.)
+  attrs: Record<string, boolean | number>;
 }
 
 export interface ShopItem {
@@ -54,6 +56,8 @@ export interface RoomState {
   enemyDefeated: boolean;
   purchasedItemIds: string[];
   opened: boolean;
+  // Extensible per-room state flags (sneaked_past, locked_to_fight, etc.)
+  flags: Record<string, boolean>;
 }
 
 export type KnowledgeEntry =
@@ -75,6 +79,8 @@ export interface PlayerStats {
   armor: Item | null;
   keys: number;
   inventory: Item[];
+  // Extensible player state (wet, blessed, invisible, etc.)
+  traits: Record<string, boolean | number>;
 }
 
 export interface CombatPrediction {

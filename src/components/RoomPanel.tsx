@@ -1,20 +1,25 @@
 import { GameState } from '../game/types';
-import { predictCombat } from '../game/combat';
+import { ACTION_REGISTRY, ActionContext } from '../game/actions';
 
 interface Props {
   state: GameState;
   onFight: () => void;
+  onAttemptAction: (actionId: string) => void;
   onBuyItem: (itemId: string) => void;
   onOpenChest: () => void;
   onMoveLeft: () => void;
   onMoveRight: () => void;
 }
 
-export function RoomPanel({ state, onFight, onBuyItem, onOpenChest, onMoveLeft, onMoveRight }: Props) {
-  const { playerPos, levelDef } = state;
+export function RoomPanel({ state, onFight, onAttemptAction, onBuyItem, onOpenChest, onMoveLeft, onMoveRight }: Props) {
+  const { playerPos, levelDef, roomStates } = state;
   const room = levelDef.rooms[playerPos];
+  const roomState = roomStates[playerPos];
   const isFirst = playerPos === 0;
   const isLast = playerPos === levelDef.rooms.length - 1;
+
+  // Disable forward nav when a living enemy is blocking the path
+  const blockedForward = room.content.type === 'enemy' && !roomState.enemyDefeated;
 
   return (
     <div className="border-t border-stone-800 px-4 py-4 min-h-36">
@@ -26,6 +31,7 @@ export function RoomPanel({ state, onFight, onBuyItem, onOpenChest, onMoveLeft, 
           <RoomActions
             state={state}
             onFight={onFight}
+            onAttemptAction={onAttemptAction}
             onBuyItem={onBuyItem}
             onOpenChest={onOpenChest}
           />
@@ -33,7 +39,11 @@ export function RoomPanel({ state, onFight, onBuyItem, onOpenChest, onMoveLeft, 
 
         <div className="flex gap-2 mt-1 shrink-0">
           <NavButton onClick={onMoveLeft} disabled={isFirst} label="← Back" />
-          <NavButton onClick={onMoveRight} disabled={isLast} label="Forward →" />
+          <NavButton
+            onClick={onMoveRight}
+            disabled={isLast || blockedForward}
+            label={blockedForward ? 'Blocked →' : 'Forward →'}
+          />
         </div>
       </div>
     </div>
@@ -43,11 +53,13 @@ export function RoomPanel({ state, onFight, onBuyItem, onOpenChest, onMoveLeft, 
 function RoomActions({
   state,
   onFight,
+  onAttemptAction,
   onBuyItem,
   onOpenChest,
 }: {
   state: GameState;
   onFight: () => void;
+  onAttemptAction: (id: string) => void;
   onBuyItem: (id: string) => void;
   onOpenChest: () => void;
 }) {
@@ -69,41 +81,41 @@ function RoomActions({
       return <p className="text-stone-500 text-xs">The {enemy.name} lies defeated.</p>;
     }
 
-    const prediction = predictCombat(player, { ...enemy, hp: roomState.enemyHp });
-    const outcomeColor = prediction.playerWins ? 'text-green-400' : 'text-red-400';
-    const outcomeText = prediction.playerWins
-      ? `You WIN — costs ${prediction.hpCost} HP`
-      : `You LOSE — insufficient power`;
+    const lockedToFight = !!roomState.flags['locked_to_fight'];
+
+    // Build action context to evaluate canAttempt for registry actions
+    const ctx: ActionContext = {
+      player,
+      enemy,
+      currentEnemyHp: roomState.enemyHp,
+      roomState,
+      roomIndex: playerPos,
+      levelDef,
+    };
+    const registryActions = Object.values(ACTION_REGISTRY).filter(a => a.canAttempt(ctx));
 
     return (
       <div className="flex flex-col gap-2">
-        <div className="text-xs text-stone-400 space-y-0.5">
-          <div>
-            <span className="text-stone-500">Enemy:</span>{' '}
-            <span className="text-red-300">{enemy.name}</span>{' '}
-            <span className="text-stone-500">({roomState.enemyHp} HP, {enemy.attack} Atk, {enemy.defense} Def)</span>
-          </div>
-          <div>
-            <span className="text-stone-500">Your damage:</span>{' '}
-            <span className="text-stone-300">{prediction.playerDamagePerRound}/round</span>
-            <span className="text-stone-600 mx-2">|</span>
-            <span className="text-stone-500">Their damage:</span>{' '}
-            <span className="text-stone-300">{prediction.enemyDamagePerRound}/round</span>
-          </div>
-          <div className={`font-bold ${outcomeColor}`}>{outcomeText}</div>
+        <div className="text-xs text-stone-400">
+          <span className="text-red-300 font-bold">{enemy.name}</span>
         </div>
-        <button
-          onClick={onFight}
-          disabled={!prediction.playerWins}
-          className={`
-            text-xs px-4 py-1.5 rounded border font-bold w-fit transition-colors
-            ${prediction.playerWins
-              ? 'border-red-700 text-red-400 hover:bg-red-950 cursor-pointer'
-              : 'border-stone-700 text-stone-600 cursor-not-allowed'}
-          `}
-        >
-          Fight
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={onFight}
+            className="text-xs px-4 py-1.5 rounded border font-bold transition-colors border-red-700 text-red-400 hover:bg-red-950 cursor-pointer"
+          >
+            Fight
+          </button>
+          {!lockedToFight && registryActions.map(a => (
+            <button
+              key={a.id}
+              onClick={() => onAttemptAction(a.id)}
+              className="text-xs px-4 py-1.5 rounded border font-bold border-stone-600 text-stone-300 hover:bg-stone-800 cursor-pointer transition-colors"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -147,11 +159,11 @@ function RoomActions({
     const needsKey = room.content.locked && player.keys < 1;
     return (
       <div className="flex flex-col gap-1">
-        {room.content.locked && (
-          <p className="text-xs text-stone-500">
-            This chest is locked. {needsKey ? 'You need a key.' : 'You have a key.'}
-          </p>
-        )}
+        <p className="text-xs text-stone-500">
+          {room.content.locked
+            ? needsKey ? 'A locked chest. You need a key.' : 'A locked chest. You have a key.'
+            : 'A chest sits here. It may be trapped.'}
+        </p>
         <button
           onClick={onOpenChest}
           disabled={needsKey}

@@ -10,7 +10,8 @@ import {
   Item,
 } from '../game/types';
 import { LEVELS } from '../game/levels';
-import { resolveCombat } from '../game/combat';
+import { resolveCombat, predictCombat } from '../game/combat';
+import { ACTION_REGISTRY, ActionContext, Effect } from '../game/actions';
 
 const BASE_ATTACK = 3;
 const BASE_DEFENSE = 0;
@@ -65,6 +66,7 @@ function initRoomStates(levelDef: LevelDefinition): RoomState[] {
     enemyDefeated: false,
     purchasedItemIds: [],
     opened: false,
+    flags: {},
   }));
 }
 
@@ -79,6 +81,7 @@ function initPlayer(levelDef: LevelDefinition): PlayerStats {
     armor: null,
     keys: 0,
     inventory: [],
+    traits: {},
   };
 }
 
@@ -99,12 +102,87 @@ function initLevel(levelDef: LevelDefinition, knowledgeMap: KnowledgeMap, attemp
 type Action =
   | { type: 'MOVE'; direction: -1 | 1 }
   | { type: 'FIGHT' }
+  | { type: 'ATTEMPT_ACTION'; actionId: string }
   | { type: 'BUY_ITEM'; itemId: string }
   | { type: 'USE_POTION' }
   | { type: 'OPEN_CHEST' }
   | { type: 'RETRY' }
   | { type: 'NEXT_LEVEL' }
   | { type: 'LOAD_LEVEL'; level: LevelDefinition };
+
+function applyEffect(state: GameState, effect: Effect, ctx: ActionContext): GameState {
+  switch (effect.type) {
+    case 'log': {
+      const entry: LogEntry = { id: ++logIdCounter, text: effect.getText(ctx), type: effect.logType };
+      return { ...state, log: [...state.log, entry] };
+    }
+    case 'damage_player': {
+      const newHp = state.player.hp - effect.amount;
+      if (newHp <= 0) return { ...state, player: { ...state.player, hp: 0 }, phase: 'dead' };
+      return { ...state, player: { ...state.player, hp: newHp } };
+    }
+    case 'damage_player_half_combat': {
+      const pred = predictCombat(state.player, { ...ctx.enemy, hp: ctx.currentEnemyHp });
+      const dmg = Math.max(1, Math.ceil(pred.hpCost / 2));
+      const newHp = state.player.hp - dmg;
+      const dmgLog: LogEntry = { id: ++logIdCounter, text: `You take ${dmg} damage.`, type: 'combat' };
+      if (newHp <= 0) return { ...state, player: { ...state.player, hp: 0 }, phase: 'dead', log: [...state.log, dmgLog] };
+      return { ...state, player: { ...state.player, hp: newHp }, log: [...state.log, dmgLog] };
+    }
+    case 'damage_player_enemy_strike': {
+      const dmg = Math.max(1, ctx.enemy.attack - state.player.defense);
+      const newHp = state.player.hp - dmg;
+      const dmgLog: LogEntry = { id: ++logIdCounter, text: `You take ${dmg} damage.`, type: 'combat' };
+      if (newHp <= 0) return { ...state, player: { ...state.player, hp: 0 }, phase: 'dead', log: [...state.log, dmgLog] };
+      return { ...state, player: { ...state.player, hp: newHp }, log: [...state.log, dmgLog] };
+    }
+    case 'defeat_enemy_no_reward': {
+      const newRoomStates = state.roomStates.map((rs, i) =>
+        i === ctx.roomIndex ? { ...rs, enemyDefeated: true, enemyHp: 0 } : rs
+      );
+      return { ...state, roomStates: newRoomStates };
+    }
+    case 'move_forward': {
+      const newPos = state.playerPos + 1;
+      if (newPos >= state.levelDef.rooms.length) return state;
+      const room = state.levelDef.rooms[newPos];
+      const newKnowledge: KnowledgeMap = state.knowledgeMap[newPos]
+        ? state.knowledgeMap
+        : { ...state.knowledgeMap, [newPos]: buildKnowledge(state.levelDef, newPos) };
+      const newRoomStates = state.roomStates.map((rs, i) => i === newPos ? { ...rs, visited: true } : rs);
+      const phase = room.content.type === 'exit' ? 'level-complete' : state.phase;
+      return { ...state, playerPos: newPos, knowledgeMap: newKnowledge, roomStates: newRoomStates, phase };
+    }
+    case 'set_room_flag': {
+      const newRoomStates = state.roomStates.map((rs, i) =>
+        i === ctx.roomIndex ? { ...rs, flags: { ...rs.flags, [effect.flag]: true } } : rs
+      );
+      return { ...state, roomStates: newRoomStates };
+    }
+    case 'clear_room_flag': {
+      const newRoomStates = state.roomStates.map((rs, i) => {
+        if (i !== ctx.roomIndex) return rs;
+        const { [effect.flag]: _removed, ...rest } = rs.flags;
+        return { ...rs, flags: rest };
+      });
+      return { ...state, roomStates: newRoomStates };
+    }
+    case 'set_player_trait':
+      return { ...state, player: { ...state.player, traits: { ...state.player.traits, [effect.trait]: effect.value } } };
+    case 'lock_to_fight': {
+      const newRoomStates = state.roomStates.map((rs, i) =>
+        i === ctx.roomIndex ? { ...rs, flags: { ...rs.flags, locked_to_fight: true } } : rs
+      );
+      return { ...state, roomStates: newRoomStates };
+    }
+    default:
+      return state;
+  }
+}
+
+function applyEffects(state: GameState, effects: Effect[], ctx: ActionContext): GameState {
+  return effects.reduce((s, effect) => applyEffect(s, effect, ctx), state);
+}
 
 function applyItem(player: PlayerStats, item: Item): PlayerStats {
   let updated = { ...player };
@@ -130,8 +208,25 @@ function reducer(state: GameState, action: Action): GameState {
       const newPos = state.playerPos + action.direction;
       if (newPos < 0 || newPos >= state.levelDef.rooms.length) return state;
 
+      // Living enemies block forward movement — must be resolved first
+      if (action.direction === 1) {
+        const cur = state.levelDef.rooms[state.playerPos];
+        const curState = state.roomStates[state.playerPos];
+        if (cur.content.type === 'enemy' && !curState.enemyDefeated) {
+          return { ...state, log: [...state.log, makeLog(`The ${cur.content.enemy.name} blocks your path!`, 'info')] };
+        }
+      }
+
+      // Sneaked-past enemies block retreat — they cut off the way back
+      if (action.direction === -1) {
+        const dest = state.levelDef.rooms[newPos];
+        const destState = state.roomStates[newPos];
+        if (dest.content.type === 'enemy' && !destState.enemyDefeated && destState.flags['sneaked_past']) {
+          return { ...state, log: [...state.log, makeLog(`The ${dest.content.enemy.name} cut off your retreat!`, 'info')] };
+        }
+      }
+
       const room = state.levelDef.rooms[newPos];
-      const roomState = state.roomStates[newPos];
       const alreadyKnown = !!state.knowledgeMap[newPos];
 
       const newKnowledgeMap: KnowledgeMap = alreadyKnown
@@ -144,29 +239,6 @@ function reducer(state: GameState, action: Action): GameState {
 
       const dirText = action.direction === 1 ? 'forward' : 'back';
       const newLog = [...state.log, makeLog(`You move ${dirText} to ${room.name}.`, 'info')];
-
-      // Auto-open unlocked chests on entry
-      if (room.content.type === 'chest' && !room.content.locked && !roomState.opened) {
-        const chest = room.content;
-        let updatedPlayer = { ...state.player };
-        let lootLog = '';
-        if (chest.lootGold > 0) {
-          updatedPlayer.gold += chest.lootGold;
-          lootLog = `You open the chest and find ${chest.lootGold} gold!`;
-        } else if (chest.lootItem) {
-          updatedPlayer = applyItem(updatedPlayer, chest.lootItem);
-          lootLog = `You open the chest and find a ${chest.lootItem.name}!`;
-        }
-        return {
-          ...state,
-          playerPos: newPos,
-          player: updatedPlayer,
-          phase: 'in-room',
-          knowledgeMap: newKnowledgeMap,
-          roomStates: newRoomStates.map((rs, i) => i === newPos ? { ...rs, opened: true } : rs),
-          log: [...newLog, makeLog(lootLog, 'loot')],
-        };
-      }
 
       // Auto-trigger exit
       if (room.content.type === 'exit') {
@@ -235,6 +307,26 @@ function reducer(state: GameState, action: Action): GameState {
         phase: 'in-room',
         log: [...state.log, ...combatLog],
       };
+    }
+
+    case 'ATTEMPT_ACTION': {
+      const room = state.levelDef.rooms[state.playerPos];
+      if (room.content.type !== 'enemy') return state;
+      const actionDef = ACTION_REGISTRY[action.actionId];
+      if (!actionDef) return state;
+      const roomState = state.roomStates[state.playerPos];
+      const ctx: ActionContext = {
+        player: state.player,
+        enemy: room.content.enemy,
+        currentEnemyHp: roomState.enemyHp,
+        roomState,
+        roomIndex: state.playerPos,
+        levelDef: state.levelDef,
+      };
+      if (!actionDef.canAttempt(ctx)) return state;
+      const success = actionDef.checkSuccess(ctx);
+      const effects = success ? actionDef.onSuccess : actionDef.onFailure;
+      return applyEffects(state, effects, ctx);
     }
 
     case 'BUY_ITEM': {
@@ -370,6 +462,7 @@ export function useGameState() {
   const moveLeft = useCallback(() => dispatch({ type: 'MOVE', direction: -1 }), []);
   const moveRight = useCallback(() => dispatch({ type: 'MOVE', direction: 1 }), []);
   const fight = useCallback(() => dispatch({ type: 'FIGHT' }), []);
+  const attemptAction = useCallback((actionId: string) => dispatch({ type: 'ATTEMPT_ACTION', actionId }), []);
   const buyItem = useCallback((itemId: string) => dispatch({ type: 'BUY_ITEM', itemId }), []);
   const usePotion = useCallback(() => dispatch({ type: 'USE_POTION' }), []);
   const openChest = useCallback(() => dispatch({ type: 'OPEN_CHEST' }), []);
@@ -377,5 +470,5 @@ export function useGameState() {
   const nextLevel = useCallback(() => dispatch({ type: 'NEXT_LEVEL' }), []);
   const loadLevel = useCallback((level: LevelDefinition) => dispatch({ type: 'LOAD_LEVEL', level }), []);
 
-  return { state, moveLeft, moveRight, fight, buyItem, usePotion, openChest, retry, nextLevel, loadLevel };
+  return { state, moveLeft, moveRight, fight, attemptAction, buyItem, usePotion, openChest, retry, nextLevel, loadLevel };
 }
