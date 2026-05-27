@@ -6,6 +6,8 @@ export interface Item {
   type: 'weapon' | 'armor' | 'consumable' | 'key';
   attackBonus: number;
   defenseBonus: number;
+  dexterityBonus: number;
+  camouflageBonus: number;
   hpRestore: number;
   description: string;
 }
@@ -75,6 +77,8 @@ export interface PlayerStats {
   gold: number;
   attack: number;
   defense: number;
+  dexterity: number;
+  camouflage: number;
   weapon: Item | null;
   armor: Item | null;
   keys: number;

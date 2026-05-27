@@ -20,7 +20,19 @@ The dungeon is a single horizontal line of rooms. The player moves left or right
 - rounds_to_kill = ceil(enemy_hp / player_damage_per_round)
 - hp_cost = (rounds_to_kill - 1) * enemy_damage_per_round
 - Player wins if rounds_to_kill <= ceil(player_hp / enemy_damage_per_round)
-- Weapons/armor from shop or chests modify player attack/defense
+- Weapons/armor from shop or chests modify player attack/defense/dexterity/camouflage
+
+## Sneak System (deterministic)
+
+- Player base sneak stats: 5 dexterity, 0 camouflage
+- Sneak succeeds if: (player.dexterity + player.camouflage + camouflage_bonus_from_scrolls) >= (enemy.perception + enemy.alertness)
+- Items like Boots of Silence (+3 dex) or Cloak of Shadows (+3 camo) enable sneaking past guarded enemies
+- Scrolls of Concealment add +5 camouflage permanently when consumed
+- Use perception/alertness on enemies to design sneak-or-fight trade-offs:
+  - Easy sneak target (rat-tier): perception 2–3, alertness 2–3 (detect 4–6, base player can sneak)
+  - Medium sneak target (goblin-tier): perception 3–5, alertness 3–4 (detect 6–9, needs boots or cloak)
+  - Hard sneak target (skeleton-tier): perception 5–7, alertness 4–6 (detect 9–13, needs boots+scroll)
+  - Impossible sneak (troll/boss): perception 7–9, alertness 7–9 (detect 14+, basically can't sneak)
 
 ## Available Items
 
@@ -31,6 +43,8 @@ ${JSON.stringify(
     type: i.type,
     attackBonus: i.attackBonus,
     defenseBonus: i.defenseBonus,
+    dexterityBonus: i.dexterityBonus,
+    camouflageBonus: i.camouflageBonus,
     hpRestore: i.hpRestore,
   })),
   null,
@@ -47,7 +61,8 @@ ${JSON.stringify(
 ## Room Types
 
 - start: always room 0, no interaction
-- enemy: { type, enemy: { id, name, hp, attack, defense, goldReward, loot? } }
+- enemy: { type, enemy: { id, name, hp, attack, defense, goldReward, attrs: { perception, alertness, intimidateThreshold }, loot? } }
+  - attrs are REQUIRED on every enemy
   - loot is optional — an item object the enemy drops on death
 - shop: { type, items: [{ item: <item object>, cost: number }] }
   - 2–3 items; price items so tight gold forces hard choices
@@ -57,9 +72,9 @@ ${JSON.stringify(
 
 ## Level Design Requirements
 
-1. SOLVABILITY: there must be at least one valid path from start to exit (verify the combat math yourself before returning)
-2. DEPENDENCY CHAIN: at least one non-obvious dependency (e.g. key from shop → locked chest → weapon needed for boss)
-3. RESOURCE TENSION: starting gold should be tight — the player cannot buy everything, must choose
+1. SOLVABILITY: there must be at least one valid path from start to exit (verify the combat and sneak math yourself before returning)
+2. DEPENDENCY CHAIN: at least one non-obvious dependency (e.g. scroll from shop → sneak past skeleton, OR key from enemy loot → locked chest → weapon)
+3. RESOURCE TENSION: starting gold should be tight — the player cannot buy everything, must choose between combat items and sneak items
 4. SCALING: harder levels have more rooms (5–9), tougher enemies, tighter gold
 5. THEME: give the level a coherent name and atmosphere
 

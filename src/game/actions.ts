@@ -43,11 +43,13 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
     id: 'sneak',
     label: 'Sneak',
     canAttempt: (ctx) => enemyAlive(ctx) && notLocked(ctx),
-    // Succeeds when enemy HP is at or below their sneakThreshold attr.
-    // Enemies with sneakThreshold=0 (default) can never be sneaked past.
+    // Succeeds when player's sneak score (dexterity + camouflage + traits bonus) >= enemy's detect score (perception + alertness).
+    // Enemies with high perception/alertness require items or scrolls to sneak past.
     checkSuccess: (ctx) => {
-      const threshold = Number(ctx.enemy.attrs['sneakThreshold'] ?? 0);
-      return ctx.currentEnemyHp <= threshold;
+      const traitBonus = Number(ctx.player.traits['camouflage_bonus'] ?? 0);
+      const sneakScore = ctx.player.dexterity + ctx.player.camouflage + traitBonus;
+      const detectScore = Number(ctx.enemy.attrs['perception'] ?? 5) + Number(ctx.enemy.attrs['alertness'] ?? 5);
+      return sneakScore >= detectScore;
     },
     onSuccess: [
       { type: 'log', getText: () => 'You slip past unnoticed.', logType: 'info' },
@@ -55,7 +57,7 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
       { type: 'move_forward' },
     ],
     onFailure: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} hears you and strikes!`, logType: 'combat' },
+      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} spots you and strikes!`, logType: 'combat' },
       { type: 'damage_player_half_combat' },
     ],
   },

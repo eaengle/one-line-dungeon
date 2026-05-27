@@ -20,7 +20,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
-            attrs: { sneakThreshold: 6, intimidateThreshold: 0 } },
+            attrs: { perception: 3, alertness: 2, intimidateThreshold: 0 } },
         },
       },
       {
@@ -30,7 +30,7 @@ export const LEVELS: LevelDefinition[] = [
           type: 'shop',
           items: [
             { item: ITEMS.sword, cost: 8 },
-            { item: ITEMS.dagger, cost: 5 },
+            { item: ITEMS.scroll_of_concealment, cost: 4 },
             { item: ITEMS.potion, cost: 4 },
           ],
         },
@@ -46,7 +46,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'goblin', name: 'Goblin Guard', hp: 14, attack: 6, defense: 1, goldReward: 4,
-            attrs: { sneakThreshold: 4, intimidateThreshold: 3 } },
+            attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 } },
         },
       },
       {
@@ -75,7 +75,7 @@ export const LEVELS: LevelDefinition[] = [
           type: 'shop',
           items: [
             { item: ITEMS.key, cost: 3 },
-            { item: ITEMS.shield, cost: 6 },
+            { item: ITEMS.boots_of_silence, cost: 6 },
             { item: ITEMS.potion, cost: 4 },
           ],
         },
@@ -86,7 +86,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'skeleton', name: 'Skeleton', hp: 18, attack: 8, defense: 2, goldReward: 6,
-            attrs: { sneakThreshold: 0, intimidateThreshold: 8 } },
+            attrs: { perception: 6, alertness: 5, intimidateThreshold: 8 } },
         },
       },
       {
@@ -100,7 +100,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'goblin', name: 'Goblin Brute', hp: 14, attack: 6, defense: 1, goldReward: 4,
-            attrs: { sneakThreshold: 4, intimidateThreshold: 3 } },
+            attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 } },
         },
       },
       {
@@ -128,7 +128,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
-            attrs: { sneakThreshold: 6, intimidateThreshold: 0 } },
+            attrs: { perception: 3, alertness: 2, intimidateThreshold: 0 } },
         },
       },
       {
@@ -138,7 +138,7 @@ export const LEVELS: LevelDefinition[] = [
           type: 'shop',
           items: [
             { item: ITEMS.mace, cost: 6 },
-            { item: ITEMS.sword, cost: 8 },
+            { item: ITEMS.cloak_of_shadows, cost: 7 },
             { item: ITEMS.shield, cost: 6 },
           ],
         },
@@ -156,7 +156,7 @@ export const LEVELS: LevelDefinition[] = [
             defense: 1,
             goldReward: 4,
             loot: ITEMS.key,
-            attrs: { sneakThreshold: 4, intimidateThreshold: 3 },
+            attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 },
           },
         },
       },
@@ -171,7 +171,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'skeleton', name: 'Skeleton Warrior', hp: 18, attack: 8, defense: 2, goldReward: 6,
-            attrs: { sneakThreshold: 0, intimidateThreshold: 8 } },
+            attrs: { perception: 6, alertness: 5, intimidateThreshold: 8 } },
         },
       },
       {
@@ -180,7 +180,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'troll', name: 'Cave Troll', hp: 26, attack: 10, defense: 3, goldReward: 15,
-            attrs: { sneakThreshold: 0, intimidateThreshold: 15 } },
+            attrs: { perception: 7, alertness: 8, intimidateThreshold: 15 } },
         },
       },
       {

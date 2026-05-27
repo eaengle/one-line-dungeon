@@ -15,6 +15,8 @@ import { ACTION_REGISTRY, ActionContext, Effect } from '../game/actions';
 
 const BASE_ATTACK = 3;
 const BASE_DEFENSE = 0;
+const BASE_DEXTERITY = 5;
+const BASE_CAMOUFLAGE = 0;
 
 let logIdCounter = 0;
 function makeLog(text: string, type: LogEntry['type']): LogEntry {
@@ -77,6 +79,8 @@ function initPlayer(levelDef: LevelDefinition): PlayerStats {
     gold: levelDef.startGold,
     attack: BASE_ATTACK,
     defense: BASE_DEFENSE,
+    dexterity: BASE_DEXTERITY,
+    camouflage: BASE_CAMOUFLAGE,
     weapon: null,
     armor: null,
     keys: 0,
@@ -187,13 +191,25 @@ function applyEffects(state: GameState, effects: Effect[], ctx: ActionContext): 
 function applyItem(player: PlayerStats, item: Item): PlayerStats {
   let updated = { ...player };
   if (item.type === 'weapon') {
-    if (updated.weapon) updated.attack -= updated.weapon.attackBonus;
+    if (updated.weapon) {
+      updated.attack -= updated.weapon.attackBonus;
+      updated.dexterity -= updated.weapon.dexterityBonus;
+      updated.camouflage -= updated.weapon.camouflageBonus;
+    }
     updated.weapon = item;
     updated.attack += item.attackBonus;
+    updated.dexterity += item.dexterityBonus;
+    updated.camouflage += item.camouflageBonus;
   } else if (item.type === 'armor') {
-    if (updated.armor) updated.defense -= updated.armor.defenseBonus;
+    if (updated.armor) {
+      updated.defense -= updated.armor.defenseBonus;
+      updated.dexterity -= updated.armor.dexterityBonus;
+      updated.camouflage -= updated.armor.camouflageBonus;
+    }
     updated.armor = item;
     updated.defense += item.defenseBonus;
+    updated.dexterity += item.dexterityBonus;
+    updated.camouflage += item.camouflageBonus;
   } else if (item.type === 'key') {
     updated.keys += 1;
   } else {
@@ -359,15 +375,28 @@ function reducer(state: GameState, action: Action): GameState {
     }
 
     case 'USE_POTION': {
-      const potionIndex = state.player.inventory.findIndex(i => i.type === 'consumable');
-      if (potionIndex === -1) return state;
-      const potion = state.player.inventory[potionIndex];
-      const newHp = Math.min(state.player.hp + potion.hpRestore, state.player.maxHp);
-      const newInventory = state.player.inventory.filter((_, i) => i !== potionIndex);
+      const itemIndex = state.player.inventory.findIndex(i => i.type === 'consumable');
+      if (itemIndex === -1) return state;
+      const item = state.player.inventory[itemIndex];
+      const newInventory = state.player.inventory.filter((_, i) => i !== itemIndex);
+      let updatedPlayer = { ...state.player, inventory: newInventory };
+      let logText = '';
+      if (item.hpRestore > 0) {
+        updatedPlayer = { ...updatedPlayer, hp: Math.min(updatedPlayer.hp + item.hpRestore, updatedPlayer.maxHp) };
+        logText = `You drink the ${item.name} and restore ${item.hpRestore} HP.`;
+      }
+      if (item.camouflageBonus > 0) {
+        const current = Number(updatedPlayer.traits['camouflage_bonus'] ?? 0);
+        updatedPlayer = {
+          ...updatedPlayer,
+          traits: { ...updatedPlayer.traits, camouflage_bonus: current + item.camouflageBonus },
+        };
+        logText = `You read the ${item.name}. Shadows embrace you (+${item.camouflageBonus} Camouflage).`;
+      }
       return {
         ...state,
-        player: { ...state.player, hp: newHp, inventory: newInventory },
-        log: [...state.log, makeLog(`You drink the potion and restore ${potion.hpRestore} HP.`, 'loot')],
+        player: updatedPlayer,
+        log: [...state.log, makeLog(logText, 'loot')],
       };
     }
 
