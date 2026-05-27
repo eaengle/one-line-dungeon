@@ -3,7 +3,7 @@ import type { PlayerStats, EnemyDefinition, RoomState, LevelDefinition, LogEntry
 // Context passed to every action check and effect resolver
 export interface ActionContext {
   player: PlayerStats;
-  enemy: EnemyDefinition;
+  enemy: EnemyDefinition | null;
   currentEnemyHp: number;
   roomState: RoomState;
   roomIndex: number;
@@ -32,13 +32,59 @@ export type Effect =
 export interface ActionDefinition {
   id: string;
   label: string;
+  // showWhen controls visibility; canAttempt controls whether the button is enabled.
+  // If showWhen is absent, canAttempt controls both.
+  showWhen?: (ctx: ActionContext) => boolean;
   canAttempt: (ctx: ActionContext) => boolean;
   checkSuccess: (ctx: ActionContext) => boolean;
   onSuccess: Effect[];
   onFailure: Effect[];
 }
 
-const enemyAlive = (ctx: ActionContext) => !ctx.roomState.enemyDefeated;
+const enemyAlive = (ctx: ActionContext) => ctx.enemy !== null && !ctx.roomState.enemyDefeated;
+
+function inspectReveal(ctx: ActionContext): string {
+  const e = ctx.enemy!;
+  const pool: string[] = [
+    `Its attack is ${e.attack}.`,
+    `Its defense is ${e.defense}.`,
+    `It has ${e.hp} HP.`,
+    ...Object.entries(e.attrs).map(([k, v]) => {
+      switch (k) {
+        case 'perception':          return `Its perception is ${v}.`;
+        case 'alertness':           return `Its alertness is ${v}.`;
+        case 'intimidateThreshold': return Number(v) >= 999 ? 'It cannot be intimidated.' : `Its intimidate threshold is ${v}.`;
+        case 'inspectDifficulty':   return null;
+        default:                    return `${k}: ${v}`;
+      }
+    }).filter((s): s is string => s !== null),
+  ];
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  return `You study the ${e.name}. ${pick}`;
+}
+
+function listenHint(ctx: ActionContext): string {
+  const next = ctx.levelDef.rooms[ctx.roomIndex + 1];
+  if (!next) return 'You hear nothing — the dungeon ends here.';
+  const c = next.content;
+  switch (c.type) {
+    case 'enemy':    return `You press your ear to the wall. Something stirs — the ${c.enemy.name} is close.`;
+    case 'shop':     return 'You hear the clink of coins and a low voice muttering prices.';
+    case 'chest':    return 'The next room is quiet — only the creak of old wood.';
+    case 'exit':     return 'A cool draft brushes past you. The exit is just ahead.';
+    case 'river':    return 'You hear rushing water from the next room.';
+    case 'fire':     return 'Heat seeps through the wall. Something burns ahead.';
+    case 'bog':      return 'A foul, damp stench drifts from ahead.';
+    case 'frozen':   return 'An icy chill bleeds through the stone. The next room is freezing.';
+    case 'pit':      return 'Your voice echoes strangely — a drop ahead.';
+    case 'spiderweb': return 'You hear a faint chittering from the darkness ahead.';
+    case 'cave_in':  return 'Dust and loose pebbles trickle past the threshold — unstable ground ahead.';
+    case 'windswept': return 'A sharp gust cuts through the gap — the next room is open to the wind.';
+    case 'graveyard': return 'An unnatural silence falls beyond the door. You smell turned earth.';
+    case 'barracks': return 'You hear slow, heavy breathing — something sleeps in the next room.';
+    default:         return 'You hear indistinct sounds from the next room but cannot make them out.';
+  }
+}
 const notLocked = (ctx: ActionContext) => !ctx.roomState.flags['locked_to_fight'];
 const roomType = (ctx: ActionContext) => ctx.levelDef.rooms[ctx.roomIndex].content.type;
 
@@ -49,12 +95,12 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   sneak: {
     id: 'sneak',
     label: 'Sneak',
-    canAttempt: (ctx) => enemyAlive(ctx) && notLocked(ctx) && !ctx.roomState.flags['sneak_disabled'],
+    canAttempt: (ctx) => enemyAlive(ctx) && notLocked(ctx) && !ctx.roomState.flags['sneak_disabled'] && !ctx.roomState.flags['sneaked_past'],
     // Succeeds when player's sneak score (dexterity + stealth + traits bonus) >= enemy's detect score (perception + alertness).
     checkSuccess: (ctx) => {
       const traitBonus = Number(ctx.player.traits['stealth_bonus'] ?? 0);
       const sneakScore = ctx.player.dexterity + ctx.player.stealth + traitBonus;
-      const detectScore = Number(ctx.enemy.attrs['perception'] ?? 5) + Number(ctx.enemy.attrs['alertness'] ?? 5);
+      const detectScore = Number(ctx.enemy!.attrs['perception'] ?? 5) + Number(ctx.enemy!.attrs['alertness'] ?? 5);
       return sneakScore >= detectScore;
     },
     onSuccess: [
@@ -63,7 +109,7 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
       { type: 'move_forward' },
     ],
     onFailure: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} spots you and strikes!`, logType: 'combat' },
+      { type: 'log', getText: (ctx) => `The ${ctx.enemy!.name} spots you and strikes!`, logType: 'combat' },
       { type: 'damage_player_half_combat' },
       { type: 'set_room_flag', flag: 'sneak_attempted' },
     ],
@@ -76,17 +122,17 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
     // Succeeds when (playerNetDmg - enemyNetDmg) >= intimidateThreshold attr.
     // High threshold = hard to intimidate. Default 999 = never.
     checkSuccess: (ctx) => {
-      const threshold = Number(ctx.enemy.attrs['intimidateThreshold'] ?? 999);
-      const playerNet = Math.max(1, ctx.player.attack - ctx.enemy.defense);
-      const enemyNet = Math.max(1, ctx.enemy.attack - ctx.player.defense);
+      const threshold = Number(ctx.enemy!.attrs['intimidateThreshold'] ?? 999);
+      const playerNet = Math.max(1, ctx.player.attack - ctx.enemy!.defense);
+      const enemyNet = Math.max(1, ctx.enemy!.attack - ctx.player.defense);
       return (playerNet - enemyNet) >= threshold;
     },
     onSuccess: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} backs down and flees!`, logType: 'info' },
+      { type: 'log', getText: (ctx) => `The ${ctx.enemy!.name} backs down and flees!`, logType: 'info' },
       { type: 'defeat_enemy_no_reward' },
     ],
     onFailure: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} is unimpressed and strikes back!`, logType: 'combat' },
+      { type: 'log', getText: (ctx) => `The ${ctx.enemy!.name} is unimpressed and strikes back!`, logType: 'combat' },
       { type: 'damage_player_enemy_strike' },
       { type: 'lock_to_fight' },
     ],
@@ -97,45 +143,28 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   listen: {
     id: 'listen',
     label: 'Listen',
-    // TODO: pre-entry action — ideally triggered from the dungeon line before entering a room.
-    // For now available in any room, once per room.
-    canAttempt: (ctx) => !ctx.roomState.flags['listened'],
-    // TODO: check room hint data (not yet in room definition); rooms without hints always return false.
-    checkSuccess: () => false,
+    // Available from any room except the last; once per room. Reveals a hint about the next room.
+    canAttempt: (ctx) => !enemyAlive(ctx) && !ctx.roomState.flags['listened'] && ctx.roomIndex < ctx.levelDef.rooms.length - 1,
+    checkSuccess: () => true,
     onSuccess: [
-      // TODO: pull hint text from room definition
-      { type: 'log', getText: () => 'You hear something useful...', logType: 'info' },
+      { type: 'log', getText: (ctx) => listenHint(ctx), logType: 'info' },
       { type: 'set_room_flag', flag: 'listened' },
     ],
-    onFailure: [
-      { type: 'log', getText: () => 'You hear nothing of note.', logType: 'info' },
-      { type: 'set_room_flag', flag: 'listened' },
-    ],
+    onFailure: [],
   },
 
   inspect: {
     id: 'inspect',
     label: 'Inspect',
     // Available before sneak is attempted; disabled once sneak has been tried or inspect already used.
-    canAttempt: (ctx) =>
-      enemyAlive(ctx) &&
-      !ctx.roomState.flags['inspect_used'] &&
-      !ctx.roomState.flags['sneak_attempted'] &&
-      !ctx.roomState.flags['sneaked_past'],
-    // perception + wisdom >= enemy inspectDifficulty attr (default 10).
-    // TODO: calibrate inspectDifficulty per enemy once attr effects are wired.
-    checkSuccess: (ctx) =>
-      ctx.player.perception + ctx.player.wisdom >= Number(ctx.enemy.attrs['inspectDifficulty'] ?? 10),
+    canAttempt: (ctx) => enemyAlive(ctx) && !ctx.roomState.flags['inspect_used'],
+    checkSuccess: () => true,
     onSuccess: [
-      // TODO: reveal a specific enemy attr or weakness from enemy definition
-      { type: 'log', getText: (ctx) => `You study the ${ctx.enemy.name} carefully and learn something.`, logType: 'info' },
+      { type: 'log', getText: (ctx) => inspectReveal(ctx), logType: 'info' },
       { type: 'set_room_flag', flag: 'inspect_used' },
+      { type: 'lock_to_fight' },
     ],
-    onFailure: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} notices your scrutiny. Sneaking is no longer an option.`, logType: 'info' },
-      { type: 'set_room_flag', flag: 'inspect_used' },
-      { type: 'set_room_flag', flag: 'sneak_disabled' },
-    ],
+    onFailure: [],
   },
 
   // ── Room Interaction ──────────────────────────────────────────────────────
@@ -143,7 +172,7 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   search: {
     id: 'search',
     label: 'Search',
-    canAttempt: (ctx) => !ctx.roomState.flags['searched'],
+    canAttempt: (ctx) => !enemyAlive(ctx) && !ctx.roomState.flags['searched'],
     // TODO: if room has 'search_triggers_trap' flag (set at generation), skip check and trigger trap immediately.
     // perception >= searchDifficulty (TODO: add to room definition; default 7).
     checkSuccess: (ctx) => ctx.player.perception >= 7,
@@ -162,22 +191,22 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   disarm_trap: {
     id: 'disarm_trap',
     label: 'Disarm Trap',
-    // Requires: chest room + trap revealed by Search + thieves' tools in inventory.
+    showWhen: (ctx) => roomType(ctx) === 'chest' && !ctx.roomState.opened && !ctx.roomState.flags['trap_disarmed'],
     canAttempt: (ctx) =>
       roomType(ctx) === 'chest' &&
-      !!ctx.roomState.flags['trap_revealed'] &&
+      !ctx.roomState.opened &&
+      !ctx.roomState.flags['trap_disarmed'] &&
       ctx.player.inventory.some(i => i.id === 'thieves_tools'),
-    // dexterity + intelligence >= trapDifficulty (TODO: add to room definition; default 10).
-    checkSuccess: (ctx) => ctx.player.dexterity + ctx.player.intelligence >= 10,
+    // Success when a trap is actually present (revealed by Search).
+    // Failure means no trap — picks are consumed but nothing happens.
+    checkSuccess: (ctx) => !!ctx.roomState.flags['trap_revealed'],
     onSuccess: [
       { type: 'log', getText: () => 'You carefully disarm the trap. The chest is safe to open.', logType: 'info' },
       { type: 'set_room_flag', flag: 'trap_disarmed' },
       { type: 'consume_item', itemId: 'thieves_tools' },
     ],
     onFailure: [
-      { type: 'log', getText: () => 'You fumble and trigger the trap!', logType: 'combat' },
-      // TODO: apply the trap's specific state from room definition instead of hardcoded stunned
-      { type: 'set_player_trait', trait: 'stunned', value: true },
+      { type: 'log', getText: () => 'You probe every hinge and latch — no trap. Your picks are spent.', logType: 'info' },
       { type: 'set_room_flag', flag: 'trap_disarmed' },
       { type: 'consume_item', itemId: 'thieves_tools' },
     ],

@@ -15,8 +15,10 @@ Requires a `.env.local` file with `VITE_OPENAI_API_KEY=<your key>` for the AI le
 
 - **Single line, no branching.** All depth comes from resource and sequencing decisions along one fixed path.
 - **Deterministic outcomes, hidden information.** Every action has a fixed result based on stats — the player is never told in advance. They discover what works through trial and error.
-- **Enemies block forward movement.** You cannot pass a living enemy. You must resolve them to proceed. Sneaking past cuts off retreat.
-- **Chests require a decision.** They don't auto-open. They may be trapped. Search first, then disarm or risk it.
+- **Enemies lock you in.** A living enemy blocks all movement — forward and backward. You must resolve them (fight, sneak, or intimidate) to leave.
+- **Sneak is one-way.** Sneaking past an enemy moves you forward and leaves the enemy alive. You can return to that room, but cannot sneak again — you must fight to clear a path forward.
+- **Listen before you commit.** Listen reveals a flavor hint about the next room. It is available any time no active enemy is present.
+- **Chests require a decision.** They don't auto-open. They may be trapped. Search first, then disarm or risk it. Disarm always shows — grayed out without picks. Using picks on an untapped chest wastes them.
 - **Knowledge persists across attempts.** Discovered room contents are remembered. 3–5 attempts per level is the target feel.
 - **All random effects are seeded at generation.** Utility rooms (mushroom, altar, rune) produce the same outcome every retry. Failure is a lesson, not bad luck.
 
@@ -67,7 +69,6 @@ Enemy action thresholds live in `EnemyDefinition.attrs` (extensible bag):
 |------|---------|
 | `perception` + `alertness` | Sneak check |
 | `intimidateThreshold` | Intimidate check |
-| `inspectDifficulty` | Inspect check |
 
 ## Action framework
 
@@ -78,14 +79,17 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   my_action: {
     id: 'my_action',
     label: 'My Action',
-    canAttempt: (ctx) => !ctx.roomState.enemyDefeated,
-    checkSuccess: (ctx) => Number(ctx.enemy.attrs['myThreshold'] ?? 0) > 0,
+    // showWhen controls visibility; canAttempt controls whether the button is enabled.
+    // If showWhen is omitted, canAttempt controls both.
+    showWhen: (ctx) => ctx.roomIndex > 0,
+    canAttempt: (ctx) => ctx.enemy !== null && !ctx.roomState.enemyDefeated,
+    checkSuccess: (ctx) => Number(ctx.enemy!.attrs['myThreshold'] ?? 0) > 0,
     onSuccess: [
       { type: 'log', getText: () => 'It worked!', logType: 'info' },
       { type: 'defeat_enemy_no_reward' },
     ],
     onFailure: [
-      { type: 'log', getText: (ctx) => `The ${ctx.enemy.name} shrugs it off.`, logType: 'combat' },
+      { type: 'log', getText: (ctx) => `The ${ctx.enemy!.name} shrugs it off.`, logType: 'combat' },
       { type: 'damage_player_enemy_strike' },
     ],
   },
@@ -96,14 +100,14 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
 
 | Action | Availability | Notes |
 |--------|-------------|-------|
-| `fight` | Enemy present | Legacy reducer case |
-| `sneak` | Enemy present, not locked | dex + stealth ≥ perception + alertness |
-| `intimidate` | Enemy present, not locked | net damage delta ≥ intimidateThreshold |
-| `listen` | Any room, once | Pre-entry hint; stubbed until room hint data added |
-| `inspect` | Enemy, before sneak attempted | Reveals attr on success; disables sneak on fail |
-| `search` | Any room, once | perception ≥ 7; may trigger trap if room flagged at generation |
-| `disarm_trap` | Chest + trap revealed + thieves' tools | Consumes tools on use |
-| `rest` | Non-enemy room, once | Restores 5 HP; hidden threat may interrupt |
+| `fight` | Enemy present | Always available against a living enemy |
+| `sneak` | Enemy present, not locked, not already sneaked | dex + stealth ≥ perception + alertness; moves forward, leaves enemy alive |
+| `intimidate` | Enemy present, not locked | net damage delta ≥ intimidateThreshold; enemy flees on success |
+| `inspect` | Enemy present, not yet inspected | Reveals one random enemy stat (non-deterministic); locks to fight-only on use |
+| `listen` | No active enemy, next room exists, once per room | Reveals a flavor hint about the next room |
+| `search` | No active enemy, once per room | perception ≥ 7; may reveal trap flag |
+| `disarm_trap` | Chest room, not yet disarmed, thieves' tools required (shown grayed without) | Disarms trap if present; wastes picks if not |
+| `rest` | No active enemy, once per room | Restores 5 HP; hidden threat may interrupt |
 | `wash` | River room + overheated | Removes overheated; may apply wet |
 | `dry_off` | Fire room + wet | Removes wet; may apply overheated |
 | `forage` | Bog/cave_in room, once | int+wis ≥ 12 → potion; else poisoned |

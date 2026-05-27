@@ -147,7 +147,7 @@ function applyEffect(state: GameState, effect: Effect, ctx: ActionContext): Game
       return { ...state, player: { ...state.player, hp: newHp } };
     }
     case 'damage_player_half_combat': {
-      const pred = predictCombat(state.player, { ...ctx.enemy, hp: ctx.currentEnemyHp });
+      const pred = predictCombat(state.player, { ...ctx.enemy!, hp: ctx.currentEnemyHp });
       const dmg = Math.max(1, Math.ceil(pred.hpCost / 2));
       const newHp = state.player.hp - dmg;
       const dmgLog: LogEntry = { id: ++logIdCounter, text: `You take ${dmg} damage.`, type: 'combat' };
@@ -155,7 +155,7 @@ function applyEffect(state: GameState, effect: Effect, ctx: ActionContext): Game
       return { ...state, player: { ...state.player, hp: newHp }, log: [...state.log, dmgLog] };
     }
     case 'damage_player_enemy_strike': {
-      const dmg = Math.max(1, ctx.enemy.attack - state.player.defense);
+      const dmg = Math.max(1, ctx.enemy!.attack - state.player.defense);
       const newHp = state.player.hp - dmg;
       const dmgLog: LogEntry = { id: ++logIdCounter, text: `You take ${dmg} damage.`, type: 'combat' };
       if (newHp <= 0) return { ...state, player: { ...state.player, hp: 0 }, phase: 'dead', log: [...state.log, dmgLog] };
@@ -262,8 +262,8 @@ function reducer(state: GameState, action: Action): GameState {
       const newPos = state.playerPos + action.direction;
       if (newPos < 0 || newPos >= state.levelDef.rooms.length) return state;
 
-      // Living enemies block forward movement — must be resolved first
-      if (action.direction === 1) {
+      // Living enemies block all movement — must be resolved first
+      {
         const cur = state.levelDef.rooms[state.playerPos];
         const curState = state.roomStates[state.playerPos];
         if (cur.content.type === 'enemy' && !curState.enemyDefeated) {
@@ -271,14 +271,6 @@ function reducer(state: GameState, action: Action): GameState {
         }
       }
 
-      // Sneaked-past enemies block retreat — they cut off the way back
-      if (action.direction === -1) {
-        const dest = state.levelDef.rooms[newPos];
-        const destState = state.roomStates[newPos];
-        if (dest.content.type === 'enemy' && !destState.enemyDefeated && destState.flags['sneaked_past']) {
-          return { ...state, log: [...state.log, makeLog(`The ${dest.content.enemy.name} cut off your retreat!`, 'info')] };
-        }
-      }
 
       const room = state.levelDef.rooms[newPos];
       const alreadyKnown = !!state.knowledgeMap[newPos];
@@ -365,13 +357,12 @@ function reducer(state: GameState, action: Action): GameState {
 
     case 'ATTEMPT_ACTION': {
       const room = state.levelDef.rooms[state.playerPos];
-      if (room.content.type !== 'enemy') return state;
       const actionDef = ACTION_REGISTRY[action.actionId];
       if (!actionDef) return state;
       const roomState = state.roomStates[state.playerPos];
       const ctx: ActionContext = {
         player: state.player,
-        enemy: room.content.enemy,
+        enemy: room.content.type === 'enemy' ? room.content.enemy : null,
         currentEnemyHp: roomState.enemyHp,
         roomState,
         roomIndex: state.playerPos,
