@@ -20,14 +20,14 @@ The dungeon is a single horizontal line of rooms. The player moves left or right
 - rounds_to_kill = ceil(enemy_hp / player_damage_per_round)
 - hp_cost = (rounds_to_kill - 1) * enemy_damage_per_round
 - Player wins if rounds_to_kill <= ceil(player_hp / enemy_damage_per_round)
-- Weapons/armor from shop or chests modify player attack/defense/dexterity/camouflage
+- Weapons/armor from shop or chests modify player attack/defense/dexterity/stealth
 
 ## Sneak System (deterministic)
 
-- Player base sneak stats: 5 dexterity, 0 camouflage
-- Sneak succeeds if: (player.dexterity + player.camouflage + camouflage_bonus_from_scrolls) >= (enemy.perception + enemy.alertness)
-- Items like Boots of Silence (+3 dex) or Cloak of Shadows (+3 camo) enable sneaking past guarded enemies
-- Scrolls of Concealment add +5 camouflage permanently when consumed
+- Player base sneak stats: 5 dexterity, 0 stealth
+- Sneak succeeds if: (player.dexterity + player.stealth + stealth_bonus_from_scrolls) >= (enemy.perception + enemy.alertness)
+- Items like Boots of Silence (+3 dex) or Cloak of Shadows (+3 stealth) enable sneaking past guarded enemies
+- Scrolls of Concealment add +5 stealth permanently when consumed
 - Use perception/alertness on enemies to design sneak-or-fight trade-offs:
   - Easy sneak target (rat-tier): perception 2–3, alertness 2–3 (detect 4–6, base player can sneak)
   - Medium sneak target (goblin-tier): perception 3–5, alertness 3–4 (detect 6–9, needs boots or cloak)
@@ -44,7 +44,7 @@ ${JSON.stringify(
     attackBonus: i.attackBonus,
     defenseBonus: i.defenseBonus,
     dexterityBonus: i.dexterityBonus,
-    camouflageBonus: i.camouflageBonus,
+    stealthBonus: i.stealthBonus,
     hpRestore: i.hpRestore,
   })),
   null,

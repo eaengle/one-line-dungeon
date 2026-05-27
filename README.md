@@ -14,17 +14,66 @@ Requires a `.env.local` file with `VITE_OPENAI_API_KEY=<your key>` for the AI le
 ## Design principles
 
 - **Single line, no branching.** All depth comes from resource and sequencing decisions along one fixed path.
-- **Deterministic outcomes, hidden information.** Every action (fight, sneak, intimidate) has a fixed result based on stats — but the player is never told ahead of time. They discover what works through trial and error.
-- **Enemies block forward movement.** You cannot pass a living enemy. You must resolve them (fight, sneak, or intimidate) to proceed. Sneaking past an enemy cuts off your retreat — they block the path back.
-- **Chests require a decision.** They don't auto-open. They may be trapped.
-- **Knowledge persists across attempts.** Discovered room contents are remembered. The retry loop is intentional: 3–5 attempts per level is the target feel.
+- **Deterministic outcomes, hidden information.** Every action has a fixed result based on stats — the player is never told in advance. They discover what works through trial and error.
+- **Enemies block forward movement.** You cannot pass a living enemy. You must resolve them to proceed. Sneaking past cuts off retreat.
+- **Chests require a decision.** They don't auto-open. They may be trapped. Search first, then disarm or risk it.
+- **Knowledge persists across attempts.** Discovered room contents are remembered. 3–5 attempts per level is the target feel.
+- **All random effects are seeded at generation.** Utility rooms (mushroom, altar, rune) produce the same outcome every retry. Failure is a lesson, not bad luck.
+
+## Player attributes
+
+All start at a nominal value of 5 (except stealth = 0). Modified by items and effects.
+
+| Attribute | Role |
+|-----------|------|
+| `strength` | Melee damage, carrying capacity |
+| `dexterity` | Speed, stealth, dodge |
+| `endurance` | Max HP basis, poison resistance |
+| `agility` | Finesse, evasion |
+| `intelligence` | Scroll effectiveness, trap disarming |
+| `wisdom` | Perception, willpower, resist effects |
+| `charisma` | Persuasion, intimidation, bribery |
+| `luck` | Edge case outcomes |
+| `perception` | Noticing hidden things, traps |
+| `stealth` | Sneaking (earned via items, base 0) |
+| `willpower` | Resist fear, curses, morale effects |
+
+`attack` and `defense` are derived combat values driven by weapon/armor bonuses.
+
+## Player states
+
+Conditions applied to the player that affect attributes and actions. Stored in `player.traits`.
+
+Environmental: `wet`, `frozen`, `overheated`, `muddy`, `blinded`
+Afflicted: `poisoned`, `diseased`, `cursed`, `bleeding`, `stunned`
+Empowered: `blessed`, `invisible`, `hasted`, `enraged`, `focused`
+Mental: `charmed`, `feared`, `demoralized`, `confident`
+Misc: `exhausted`, `satiated`
+
+## Monster attributes
+
+Every enemy has `weaknesses`, `resistances`, and `immunities` as typed arrays of `MonsterAttribute`.
+
+| Category | Values |
+|----------|--------|
+| Elemental | `fire` `ice` `lightning` `poison` `holy` `dark` |
+| Physical | `blunt` `slash` `pierce` |
+| Status | `stun` `fear` `charm` `bleed` `sleep` `blind` `curse` |
+| Special | `intimidation` `sneak` `silver` `magic` |
+
+Enemy action thresholds live in `EnemyDefinition.attrs` (extensible bag):
+
+| Attr | Used by |
+|------|---------|
+| `perception` + `alertness` | Sneak check |
+| `intimidateThreshold` | Intimidate check |
+| `inspectDifficulty` | Inspect check |
 
 ## Action framework
 
 Actions are data, not code. Adding a new action requires only a new entry in `src/game/actions.ts` — no reducer changes.
 
 ```typescript
-// src/game/actions.ts
 export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
   my_action: {
     id: 'my_action',
@@ -43,44 +92,60 @@ export const ACTION_REGISTRY: Record<string, ActionDefinition> = {
 };
 ```
 
-The action button appears automatically in the room panel when `canAttempt` returns true. No UI changes needed.
+### Current actions
+
+| Action | Availability | Notes |
+|--------|-------------|-------|
+| `fight` | Enemy present | Legacy reducer case |
+| `sneak` | Enemy present, not locked | dex + stealth ≥ perception + alertness |
+| `intimidate` | Enemy present, not locked | net damage delta ≥ intimidateThreshold |
+| `listen` | Any room, once | Pre-entry hint; stubbed until room hint data added |
+| `inspect` | Enemy, before sneak attempted | Reveals attr on success; disables sneak on fail |
+| `search` | Any room, once | perception ≥ 7; may trigger trap if room flagged at generation |
+| `disarm_trap` | Chest + trap revealed + thieves' tools | Consumes tools on use |
+| `rest` | Non-enemy room, once | Restores 5 HP; hidden threat may interrupt |
+| `wash` | River room + overheated | Removes overheated; may apply wet |
+| `dry_off` | Fire room + wet | Removes wet; may apply overheated |
+| `forage` | Bog/cave_in room, once | int+wis ≥ 12 → potion; else poisoned |
 
 ### Available effects
 
 | Effect | Description |
-|---|---|
+|--------|-------------|
 | `log` | Append a message to the game log |
 | `damage_player` | Deal a fixed amount of damage |
 | `damage_player_half_combat` | Deal half of what a full fight would cost |
 | `damage_player_enemy_strike` | Enemy deals one full attack hit |
-| `defeat_enemy_no_reward` | Enemy is removed; no gold or loot |
+| `defeat_enemy_no_reward` | Enemy removed; no gold or loot |
 | `move_forward` | Advance player to the next room |
 | `set_room_flag` | Set a named boolean flag on the current room |
-| `clear_room_flag` | Clear a named flag from the current room |
-| `set_player_trait` | Set a named trait on the player |
+| `clear_room_flag` | Clear a named flag |
+| `set_player_trait` | Set a named trait on the player (use `false` to remove) |
 | `lock_to_fight` | Hides all actions except Fight for this enemy |
+| `restore_hp` | Heal player up to maxHp |
+| `add_item` | Add an item from ITEMS registry to inventory |
+| `consume_item` | Remove one instance of an item from inventory |
 
 ### Adding a new effect type
 
 1. Add it to the `Effect` union in `src/game/actions.ts`
 2. Add a `case` for it in `applyEffect` in `src/hooks/useGameState.ts`
 
-## Attribute system
+## Room types
 
-All entities carry extensible attribute bags. New attributes cost zero boilerplate.
+33 room types are defined in `RoomType`. Effects and interactions are scaffolded with `// TODO` comments and implemented one at a time.
 
-| Bag | Lives on | Purpose |
-|---|---|---|
-| `EnemyDefinition.attrs` | Enemies | Action thresholds (`sneakThreshold`, `intimidateThreshold`), special behaviours |
-| `PlayerStats.traits` | Player | Status effects (`wet`, `blessed`, `invisible`, etc.) |
-| `RoomState.flags` | Room instance | Per-run state (`sneaked_past`, `locked_to_fight`, `trap_armed`, etc.) |
+**Core:** `start` `enemy` `shop` `chest` `exit`
 
-### Current enemy attrs
+**Environmental** (apply player state on entry, optional enemy):
+`river` `fire` `pit` `bog` `frozen` `spiderweb` `cave_in` `windswept` `graveyard` `barracks`
 
-| Attr | Meaning |
-|---|---|
-| `sneakThreshold` | Sneak succeeds if enemy's current HP is at or below this value |
-| `intimidateThreshold` | Intimidate succeeds if `(playerNetDmg − enemyNetDmg) >=` this value |
+**Utility** (player opts in; seeded effect, consistent across retries):
+`scroll` `seer` `forge` `altar` `healing` `mushroom` `rune` `pawn`
+
+**Gated** (blocked without correct item or stat):
+`locked_door` `chasm` `barred_gate` `dark_corridor` `magic_barrier`
+`flooded_passage` `narrow_crawlway` `cursed_threshold` `pressure_plate` `checkpoint`
 
 ## Project structure
 
@@ -92,7 +157,7 @@ src/
     items.ts          — item definitions
     levels.ts         — hardcoded level definitions
     levelGenerator.ts — OpenAI-powered level generator
-    types.ts          — all shared types
+    types.ts          — all shared types (RoomType, PlayerState, MonsterAttribute, etc.)
   hooks/
     useGameState.ts   — reducer, applyEffects engine, all game logic
   components/

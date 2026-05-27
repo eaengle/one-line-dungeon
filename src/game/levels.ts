@@ -20,6 +20,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 3, alertness: 2, intimidateThreshold: 0 } },
         },
       },
@@ -46,6 +47,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'goblin', name: 'Goblin Guard', hp: 14, attack: 6, defense: 1, goldReward: 4,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 } },
         },
       },
@@ -86,6 +88,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'skeleton', name: 'Skeleton', hp: 18, attack: 8, defense: 2, goldReward: 6,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 6, alertness: 5, intimidateThreshold: 8 } },
         },
       },
@@ -100,6 +103,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'goblin', name: 'Goblin Brute', hp: 14, attack: 6, defense: 1, goldReward: 4,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 } },
         },
       },
@@ -128,6 +132,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'rat', name: 'Giant Rat', hp: 6, attack: 3, defense: 0, goldReward: 2,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 3, alertness: 2, intimidateThreshold: 0 } },
         },
       },
@@ -156,6 +161,7 @@ export const LEVELS: LevelDefinition[] = [
             defense: 1,
             goldReward: 4,
             loot: ITEMS.key,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 4, alertness: 3, intimidateThreshold: 3 },
           },
         },
@@ -171,6 +177,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'skeleton', name: 'Skeleton Warrior', hp: 18, attack: 8, defense: 2, goldReward: 6,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 6, alertness: 5, intimidateThreshold: 8 } },
         },
       },
@@ -180,6 +187,7 @@ export const LEVELS: LevelDefinition[] = [
         content: {
           type: 'enemy',
           enemy: { id: 'troll', name: 'Cave Troll', hp: 26, attack: 10, defense: 3, goldReward: 15,
+            weaknesses: [], resistances: [], immunities: [],
             attrs: { perception: 7, alertness: 8, intimidateThreshold: 15 } },
         },
       },

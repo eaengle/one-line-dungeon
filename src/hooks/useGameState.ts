@@ -10,13 +10,23 @@ import {
   Item,
 } from '../game/types';
 import { LEVELS } from '../game/levels';
+import { ITEMS } from '../game/items';
 import { resolveCombat, predictCombat } from '../game/combat';
 import { ACTION_REGISTRY, ActionContext, Effect } from '../game/actions';
 
 const BASE_ATTACK = 3;
 const BASE_DEFENSE = 0;
+const BASE_STRENGTH = 5;
 const BASE_DEXTERITY = 5;
-const BASE_CAMOUFLAGE = 0;
+const BASE_ENDURANCE = 5;
+const BASE_AGILITY = 5;
+const BASE_INTELLIGENCE = 5;
+const BASE_WISDOM = 5;
+const BASE_CHARISMA = 5;
+const BASE_LUCK = 5;
+const BASE_PERCEPTION = 5;
+const BASE_STEALTH = 0;
+const BASE_WILLPOWER = 5;
 
 let logIdCounter = 0;
 function makeLog(text: string, type: LogEntry['type']): LogEntry {
@@ -57,6 +67,8 @@ function buildKnowledge(levelDef: LevelDefinition, roomId: number): KnowledgeEnt
         locked: c.locked,
         lootDescription: c.lootItem ? c.lootItem.name : c.lootGold > 0 ? `${c.lootGold} gold` : 'empty',
       };
+    default:
+      return { type: c.type, description: c.type.replace(/_/g, ' ') };
   }
 }
 
@@ -79,8 +91,17 @@ function initPlayer(levelDef: LevelDefinition): PlayerStats {
     gold: levelDef.startGold,
     attack: BASE_ATTACK,
     defense: BASE_DEFENSE,
+    strength: BASE_STRENGTH,
     dexterity: BASE_DEXTERITY,
-    camouflage: BASE_CAMOUFLAGE,
+    endurance: BASE_ENDURANCE,
+    agility: BASE_AGILITY,
+    intelligence: BASE_INTELLIGENCE,
+    wisdom: BASE_WISDOM,
+    charisma: BASE_CHARISMA,
+    luck: BASE_LUCK,
+    perception: BASE_PERCEPTION,
+    stealth: BASE_STEALTH,
+    willpower: BASE_WILLPOWER,
     weapon: null,
     armor: null,
     keys: 0,
@@ -179,6 +200,23 @@ function applyEffect(state: GameState, effect: Effect, ctx: ActionContext): Game
       );
       return { ...state, roomStates: newRoomStates };
     }
+    case 'restore_hp': {
+      const newHp = Math.min(state.player.maxHp, state.player.hp + effect.amount);
+      return { ...state, player: { ...state.player, hp: newHp } };
+    }
+    case 'add_item': {
+      const item = ITEMS[effect.itemId];
+      if (!item) return state;
+      return { ...state, player: { ...state.player, inventory: [...state.player.inventory, item] } };
+    }
+    case 'consume_item': {
+      let removed = false;
+      const newInventory = state.player.inventory.filter(i => {
+        if (!removed && i.id === effect.itemId) { removed = true; return false; }
+        return true;
+      });
+      return { ...state, player: { ...state.player, inventory: newInventory } };
+    }
     default:
       return state;
   }
@@ -194,22 +232,22 @@ function applyItem(player: PlayerStats, item: Item): PlayerStats {
     if (updated.weapon) {
       updated.attack -= updated.weapon.attackBonus;
       updated.dexterity -= updated.weapon.dexterityBonus;
-      updated.camouflage -= updated.weapon.camouflageBonus;
+      updated.stealth -= updated.weapon.stealthBonus;
     }
     updated.weapon = item;
     updated.attack += item.attackBonus;
     updated.dexterity += item.dexterityBonus;
-    updated.camouflage += item.camouflageBonus;
+    updated.stealth += item.stealthBonus;
   } else if (item.type === 'armor') {
     if (updated.armor) {
       updated.defense -= updated.armor.defenseBonus;
       updated.dexterity -= updated.armor.dexterityBonus;
-      updated.camouflage -= updated.armor.camouflageBonus;
+      updated.stealth -= updated.armor.stealthBonus;
     }
     updated.armor = item;
     updated.defense += item.defenseBonus;
     updated.dexterity += item.dexterityBonus;
-    updated.camouflage += item.camouflageBonus;
+    updated.stealth += item.stealthBonus;
   } else if (item.type === 'key') {
     updated.keys += 1;
   } else {
@@ -385,13 +423,13 @@ function reducer(state: GameState, action: Action): GameState {
         updatedPlayer = { ...updatedPlayer, hp: Math.min(updatedPlayer.hp + item.hpRestore, updatedPlayer.maxHp) };
         logText = `You drink the ${item.name} and restore ${item.hpRestore} HP.`;
       }
-      if (item.camouflageBonus > 0) {
-        const current = Number(updatedPlayer.traits['camouflage_bonus'] ?? 0);
+      if (item.stealthBonus > 0) {
+        const current = Number(updatedPlayer.traits['stealth_bonus'] ?? 0);
         updatedPlayer = {
           ...updatedPlayer,
-          traits: { ...updatedPlayer.traits, camouflage_bonus: current + item.camouflageBonus },
+          traits: { ...updatedPlayer.traits, stealth_bonus: current + item.stealthBonus },
         };
-        logText = `You read the ${item.name}. Shadows embrace you (+${item.camouflageBonus} Camouflage).`;
+        logText = `You read the ${item.name}. Shadows embrace you (+${item.stealthBonus} Stealth).`;
       }
       return {
         ...state,
